@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import gc
+
+pd.set_option('display.width', 500, 'display.max_rows', 500, 'precision', 2)
+
 train = pd.read_csv('./input/train.csv')
 
 
@@ -17,7 +20,6 @@ print(train.describe())
 
 # correlation analysis
 corr_df = train.select_dtypes(exclude=['object']).corr()
-print(corr_df.head())
 
 # correlation with y
 corr_with_y = corr_df['SalePrice'].to_dict()
@@ -28,31 +30,53 @@ for ele in sorted(corr_with_y.items(), key=lambda x: -abs(x[1])):
 
 # mutual correlation between features
 high_corr_list = []
-feats = set()
-for i, corr in corr_df[(corr_df >= 0.7) & (corr_df != 1.0)].to_dict().items():
+feats = []
+for i, corr in corr_df[(corr_df >= 0.6) & (corr_df != 1.0)].to_dict().items():
     for k, v in corr.items():
-        if pd.isnull(v):  # 此处有坑：如果用 if v == np.nan来判断，如果v是nan也会返回False，因为nan是float的子类
+        if pd.isnull(v):  # 此处有坑：如果用 if v == np.nan来判断，如果v是nan也会返回False，因为nan是float的子类,
             # 正确的判断方法：np.isnan(), pd.isnull(), import math math.isnan()
             continue
         elif i != 'SalePrice' and k != 'SalePrice':
             # print(i, k, v)
-            feats.add(set((i, k)))
-            if set((i, k)) not in feats:
+            if {i, k} not in feats:  # type({i, k}): set
+                feats.append({i, k})
                 high_corr_list.append((i, k, v))
-high_corr_df = pd.DataFrame(high_corr_list, columns=['feat1', 'feat2', 'feat1 vs feat2'])
+high_corr_df = pd.DataFrame(high_corr_list, columns=['feat1', 'feat2', 'feat1_vs_feat2'])
 del high_corr_list
 gc.collect()
+
 feat1_vs_y, feat2_vs_y = [], []
 for f in high_corr_df['feat1']:
     feat1_vs_y.append(corr_df.loc[f, 'SalePrice'])
 for f in high_corr_df['feat2']:
     feat2_vs_y.append(corr_df.loc[f, 'SalePrice'])
-high_corr_df['feat1 vs y'] = feat1_vs_y
-high_corr_df['feat2 vs y'] = feat2_vs_y
-
+high_corr_df['feat1_vs_y'] = feat1_vs_y
+high_corr_df['feat2_vs_y'] = feat2_vs_y
+del feat1_vs_y, feat2_vs_y
 gc.collect()
+delete_feats = []
+for i in high_corr_df.index:
+    if high_corr_df.loc[i, 'feat1_vs_y'] >= high_corr_df.loc[i, 'feat2_vs_y']:
+        delete_feats.append(high_corr_df.loc[i, 'feat2'])
+    else:
+        delete_feats.append(high_corr_df.loc[i, 'feat1'])
+high_corr_df['delete_feat'] = delete_feats
+high_corr_df.sort_values(axis=0, ascending=False, by=['feat1_vs_feat2', 'feat1_vs_y', 'feat2_vs_y'], inplace=True)
 print(high_corr_df)
-# heatmap visual
+
+# drop feats
+orig_feat_nums = len(train.columns)
+for f in set(delete_feats):
+    train.drop(f, inplace=True, axis=1)
+    print('> %s deleted from train' % f)
+delta = (orig_feat_nums - len(train.columns))
+print('>> deleted %d features' % delta)
+del orig_feat_nums, delta
+gc.collect()
+
+# visual
+# heat map
+corr_df = train.select_dtypes(exclude=['object']).corr()
 k = 10  # number of variables for heatmap
 cols = corr_df.nlargest(k, 'SalePrice')['SalePrice'].index
 cm = np.corrcoef(train[cols].values.T)
@@ -63,4 +87,13 @@ hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f', annot_kws={'
 plt.xticks(rotation=90)
 plt.yticks(rotation=0)
 plt.show()
+# pair plot
+k = 5
+cols = corr_df.nlargest(k, 'SalePrice')['SalePrice'].index
+sns.set()
+sns.pairplot(train[cols])
+plt.show()
+
+
+# outliers
 
