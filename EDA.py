@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import gc
 
-pd.set_option('display.width', 500, 'display.max_rows', 500, 'precision', 2)
+pd.set_option('display.width', 500, 'display.max_rows', 500)  # 'precision', 2
+# np.set_printoptions(suppress=True)
 
 train = pd.read_csv('./input/train.csv')
 
@@ -86,14 +87,93 @@ hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f', annot_kws={'
                  xticklabels=cols.values)
 plt.xticks(rotation=90)
 plt.yticks(rotation=0)
-plt.show()
+# plt.show()
 # pair plot
-k = 5
+k = 4
 cols = corr_df.nlargest(k, 'SalePrice')['SalePrice'].index
 sns.set()
 sns.pairplot(train[cols])
+# plt.show()
+
+
+# outliers of main feats
+print(corr_df.nlargest(8, 'SalePrice')['SalePrice'].index)
+
+# 1. OverallQual
+print(train.dtypes['OverallQual'])  # Overall material and finish quality
+print(train['OverallQual'].describe())
+train['OverallQual'] = train['OverallQual'].astype('category')  # change type to category
+# plot
+f, ax = plt.subplots(figsize=(8, 6))
+fig = sns.boxplot(train.OverallQual, train.SalePrice)
+fig.axis(ymin=0, ymax=800000)
 plt.show()
+# # the plot reveals a strong correlation and seem no outliers
+
+# 2. GrLivArea
+# temp_df = pd.concat([train['SalePrice'], train['GrLivArea']], axis=1)
+# temp_df.plot.scatter(x='GrLivArea', y='SalePrice', ylim=(0, 800000))
+# # an alternative to plot: no new dataframe was created, recommended
+plt.figure(figsize=(8, 6))
+plt.scatter(x=train.GrLivArea, y=train.SalePrice)
+plt.xlabel('GrLivArea', fontsize=13)
+plt.ylabel('SalePrice', fontsize=13)
+plt.ylim(0, 800000)
+plt.show()
+# the plot reveals two outliers, drop them
+train.drop(train[(train['GrLivArea'] > 4000) & (train['SalePrice'] < 300000)].index, inplace=True)
+print('>> dropped two outliers of GrLivArea')
+
+# 3. TotalBsmtSF
+plt.figure(figsize=(8, 6))
+plt.scatter(x=train.TotalBsmtSF, y=train.SalePrice)
+plt.xlabel('TotalBsmtSF', fontsize=13)
+plt.ylabel('SalePrice', fontsize=13)
+plt.ylim(0, 800000)
+plt.show()
+# the outliers of TotalBsmtSF already deleted when drop outliers of GrLivArea
+
+# 4. YearBuilt
+plt.figure(figsize=(12, 8))
+sns.boxplot(train.YearBuilt, train.SalePrice)
+plt.xticks(rotation=90)
+# non remarkable tendency, let it be; any other way???
+
+# 5. YearRemodAdd
+plt.figure(figsize=(12, 8))
+sns.boxplot(train.YearRemodAdd, train.SalePrice)
+plt.xticks(rotation=90)
+plt.show()
+# newly add houses seem have higher price
+
+# 6. MasVnrArea: Masonry veneer area...
+plt.figure(figsize=(8, 6))
+plt.scatter(x=train.MasVnrArea, y=train.SalePrice)
+plt.xlabel('MasVnrArea', fontsize=13)
+plt.ylabel('SalePrice', fontsize=13)
+plt.ylim(0, 800000)
+plt.show()
+# it is wired that this feature could affect house price,
+# after all, nobody will take this into consideration when buying a house
+print(corr_df.loc['MasVnrArea', 'SalePrice'])  # 0.477493047096
+# it turns out that it does have effects on price..., so keep it
+
+# 7. Fireplaces: Number of fireplaces
+plt.figure(figsize=(8, 6))
+plt.scatter(x=train.Fireplaces, y=train.SalePrice)
+plt.xlabel('Fireplaces', fontsize=13)
+plt.ylabel('SalePrice', fontsize=13)
+plt.ylim(0, 800000)
+plt.show()
+# so evident trend, can not spot outliers...
 
 
-# outliers
-
+# missing data
+missing_df = train.isnull().sum()
+missing_df = missing_df[missing_df > 0]  # remove 0 missing data columns
+pct_df = round((train.isnull().sum() / train.isnull().count()), 2).sort_values(ascending=False)
+# pct_df.apply()
+missing_df = pd.concat([missing_df, pct_df[pct_df > 0.0000]], axis=1, keys=['Total', 'Percent'])
+missing_df.sort_values(axis=0, ascending=False, by=['Percent', 'Total'], inplace=True)
+print(missing_df)
+# 保留小数问题 缺失值处理
