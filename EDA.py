@@ -6,7 +6,6 @@ import seaborn as sns
 import gc
 
 pd.set_option('display.width', 500, 'display.max_rows', 500)  # 'precision', 2
-# np.set_printoptions(suppress=True)
 
 train = pd.read_csv('./input/train.csv')
 
@@ -107,7 +106,7 @@ train['OverallQual'] = train['OverallQual'].astype('category')  # change type to
 f, ax = plt.subplots(figsize=(8, 6))
 fig = sns.boxplot(train.OverallQual, train.SalePrice)
 fig.axis(ymin=0, ymax=800000)
-plt.show()
+# plt.show()
 # # the plot reveals a strong correlation and seem no outliers
 
 # 2. GrLivArea
@@ -119,7 +118,7 @@ plt.scatter(x=train.GrLivArea, y=train.SalePrice)
 plt.xlabel('GrLivArea', fontsize=13)
 plt.ylabel('SalePrice', fontsize=13)
 plt.ylim(0, 800000)
-plt.show()
+# plt.show()
 # the plot reveals two outliers, drop them
 train.drop(train[(train['GrLivArea'] > 4000) & (train['SalePrice'] < 300000)].index, inplace=True)
 print('>> dropped two outliers of GrLivArea')
@@ -130,20 +129,21 @@ plt.scatter(x=train.TotalBsmtSF, y=train.SalePrice)
 plt.xlabel('TotalBsmtSF', fontsize=13)
 plt.ylabel('SalePrice', fontsize=13)
 plt.ylim(0, 800000)
-plt.show()
+# plt.show()
 # the outliers of TotalBsmtSF already deleted when drop outliers of GrLivArea
 
 # 4. YearBuilt
 plt.figure(figsize=(12, 8))
 sns.boxplot(train.YearBuilt, train.SalePrice)
 plt.xticks(rotation=90)
+# plt.show()
 # non remarkable tendency, let it be; any other way???
 
 # 5. YearRemodAdd
 plt.figure(figsize=(12, 8))
 sns.boxplot(train.YearRemodAdd, train.SalePrice)
 plt.xticks(rotation=90)
-plt.show()
+# plt.show()
 # newly add houses seem have higher price
 
 # 6. MasVnrArea: Masonry veneer area...
@@ -152,7 +152,7 @@ plt.scatter(x=train.MasVnrArea, y=train.SalePrice)
 plt.xlabel('MasVnrArea', fontsize=13)
 plt.ylabel('SalePrice', fontsize=13)
 plt.ylim(0, 800000)
-plt.show()
+# plt.show()
 # it is wired that this feature could affect house price,
 # after all, nobody will take this into consideration when buying a house
 print(corr_df.loc['MasVnrArea', 'SalePrice'])  # 0.477493047096
@@ -164,16 +164,47 @@ plt.scatter(x=train.Fireplaces, y=train.SalePrice)
 plt.xlabel('Fireplaces', fontsize=13)
 plt.ylabel('SalePrice', fontsize=13)
 plt.ylim(0, 800000)
-plt.show()
-# so evident trend, can not spot outliers...
+# plt.show()
+# no evident trend, can not spot outliers...
 
 
 # missing data
+# calculate total missing value and missing percent
 missing_df = train.isnull().sum()
 missing_df = missing_df[missing_df > 0]  # remove 0 missing data columns
-pct_df = round((train.isnull().sum() / train.isnull().count()), 2).sort_values(ascending=False)
-# pct_df.apply()
+pct_df = (train.isnull().sum() / train.isnull().count()).sort_values(ascending=False)
+# pct_df = pct_df.applymap(lambda x: '% .3f' % x)
 missing_df = pd.concat([missing_df, pct_df[pct_df > 0.0000]], axis=1, keys=['Total', 'Percent'])
 missing_df.sort_values(axis=0, ascending=False, by=['Percent', 'Total'], inplace=True)
+# missing_df['Percent'] = missing_df['Percent'].map(lambda x: '%.2f%%' % (x*100))
 print(missing_df)
-# 保留小数问题 缺失值处理
+
+# drop feats that have over 70% missing values
+# see if these fests have high correlation with y
+for f in missing_df.index:
+    try:
+        print(f, corr_df.loc[f, 'SalePrice'])
+    except KeyError:
+        print(f, ': category feats')
+# MasVnrArea:0.477493047096, LotFrontage:0.351799096571
+
+drop_feats = missing_df[missing_df['Percent'] > 0.15].index
+
+plt.figure(figsize=(12, 8))
+sns.boxplot(train.PoolQC, train.SalePrice)
+train.groupby(['PoolQC'])[['PoolQC']].count()
+# it is clear that although PoolQC have so many missing values, it does effect price, so keep it
+train['PoolQC'].fillna('None', inplace=True)
+drop_feats.remove('PoolQC')
+
+
+
+for f in drop_feats:
+    train.drop(f, inplace=True, axis=1)
+    print('> deleted from train due to missing value: %s ' % f)
+# ???: if keep and fill LotFrontage, MasVnrArea, will be any difference?
+
+# Electrical only have one missing value, drop this mising sample
+train.drop(train.loc[train['Electrical'].isnull()].index, inplace=True)
+print('>> drop one sample due to missing value of Electrical')
+
