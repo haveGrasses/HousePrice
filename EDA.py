@@ -192,64 +192,95 @@ for f in missing_df.index:
 # MasVnrArea:0.477493047096, LotFrontage:0.351799096571
 
 wanna_drop_feats = list(missing_df[missing_df['Percent'] > 0.15].index)
-cate_missing = [str(f) for f in missing_df.index if train.dtypes[f] == object]
-nume_missing = [str(f) for f in missing_df.index if train.dtypes[f] != object]
 
-# see if these feats should be kept
-for f in cate_missing:
-    plt.figure(figsize=(12, 8))
-    sns.boxplot(train[f], train.SalePrice)
-    train.groupby([f])[[f]].count()
+# info that data description provided
+fill_with_None = ['Alley', 'MasVnrType', 'BsmtQual', 'BsmtCond', 'BsmtExposure',
+                  'BsmtFinType1', 'BsmtFinType2', 'FireplaceQu', 'GarageType', 'GarageFinish',
+                  'GarageCond', 'GarageQual', 'PoolQC', 'Fence', 'MiscFeature']
+for f in fill_with_None:
+    train[f].fillna('None', inplace=True)
+    missing_df.drop(f, axis=0, inplace=True)
 
-drop_feats = ['basementfintype2', 'Fence']
-
-# missing value of PoolQC
-plt.figure(figsize=(12, 8))
-sns.boxplot(train.PoolQC, train.SalePrice)
-train.groupby(['PoolQC'])[['PoolQC']].count()
-# it is clear that although PoolQC have so many missing values, it does effect price, so keep it
-train['PoolQC'].fillna('None', inplace=True)  # add a new value 'None' for 'PoolQC'
-wanna_drop_feats.remove('PoolQC')
-
-# missing value of MiscFeature, MiscVal(Miscellaneous feature not covered in other categories and its values)
-plt.figure(figsize=(12, 8))
-sns.boxplot(train.MiscFeature, train.SalePrice)
-train.groupby(['MiscFeature'])[['MiscFeature']].count()
-train['MiscFeature'].fillna('None', inplace=True)
-print(train['MiscFeature'].head())  # no missing value, the value of MiscVal where MiscFeature is None is 0
-wanna_drop_feats.remove('MiscFeature')
-# missing value of Alley
-plt.figure(figsize=(12, 8))
-sns.boxplot(train.Alley, train.SalePrice)
-train.groupby(['Alley'])[['Alley']].count()
-train['MiscFeature'].fillna('missing', inplace=True)
-wanna_drop_feats.remove('Alley')
-
-# Fence
-plt.figure(figsize=(12, 8))
-sns.boxplot(train.Fence, train.SalePrice)
-train.groupby(['Fence'])[['Fence']].count()
-train['Fence'].fillna('missing', inplace=True)
-wanna_drop_feats.remove('Fence')
-
-# FireplaceQu
-plt.figure(figsize=(12, 8))
-sns.boxplot(train.FireplaceQu, train.SalePrice)
-train.groupby(['FireplaceQu'])[['Fence']].count()
-train['FireplaceQu'].fillna('None', inplace=True)
-wanna_drop_feats.remove('FireplaceQu')
-
-# LotFrontage
-plt.figure(figsize=(12, 8))
-plt.scatter(train.LotFrontage, train.SalePrice)
-
-
-for f in wanna_drop_feats:
-    train.drop(f, inplace=True, axis=1)
-    print('> deleted from train due to missing value: %s ' % f)
-# ???: if keep and fill LotFrontage, MasVnrArea, will be any difference?
-
-# Electrical only have one missing value, drop this mising sample
+print(missing_df)
+# Electrical: only have one missing value, drop this mising sample
 train.drop(train.loc[train['Electrical'].isnull()].index, inplace=True)
+missing_df.drop('Electrical', axis=0, inplace=True)
 print('>> drop one sample due to missing value of Electrical')
+# MasVnrArea
+print(train.loc[train.loc[train['MasVnrArea'].isnull()].index, ['MasVnrType', 'MasVnrArea']])
+# MasVnrArea is missing when MasVnrType is None, which means no MasVnrType, thus area is 0, so fill with 0
+train['MasVnrArea'].fillna(0, inplace=True)
+missing_df.drop('MasVnrArea', axis=0, inplace=True)
+# LotFrontage: means that portion of a lot that abuts a public or private street.
+# So it has something to do with Neighborhood and LotArea
+train.groupby(['Neighborhood'])[['LotFrontage']].agg(['mean', 'median', 'count'])
+train['LotAreaCut'] = pd.qcut(train.LotArea, 10)
+train.groupby(['LotAreaCut'])[['LotFrontage']].agg(['mean', 'median', 'count'])
+train['LotFrontage'] = train.groupby(['LotAreaCut', 'Neighborhood'])['LotFrontage'].transform(lambda x: x.fillna(x.median()))
+missing_df.drop('LotFrontage', axis=0, inplace=True)
+print(train.isnull().sum().sum())
+# why LotFrontage still has 7 missing values???
+train['LotFrontage'] = train.groupby(['LotAreaCut'])['LotFrontage'].transform(lambda x: x.fillna(x.median()))
+print(train.isnull().sum().sum())  # 0
+del train['LotAreaCut']
+# cate_missing = [str(f) for f in missing_df.index if train.dtypes[f] == object and f not in fill_with_None]
+# nume_missing = [str(f) for f in missing_df.index if train.dtypes[f] != object]
+
+
+# # see if these feats should be kept
+# for f in cate_missing:
+#     plt.figure(figsize=(12, 8))
+#     sns.boxplot(train[f], train.SalePrice)
+#     train.groupby([f])[[f]].count()
+#
+# drop_cate_feats = ['basementfintype2', 'Fence']
+# fill_cate_feats = list(set(cate_missing) ^ set(drop_cate_feats))
+#
+# # missing value of PoolQC
+# plt.figure(figsize=(12, 8))
+# sns.boxplot(train.PoolQC, train.SalePrice)
+# train.groupby(['PoolQC'])[['PoolQC']].count()
+# # it is clear that although PoolQC have so many missing values, it does effect price, so keep it
+# train['PoolQC'].fillna('None', inplace=True)  # add a new value 'None' for 'PoolQC'
+# wanna_drop_feats.remove('PoolQC')
+#
+# # missing value of MiscFeature, MiscVal(Miscellaneous feature not covered in other categories and its values)
+# plt.figure(figsize=(12, 8))
+# sns.boxplot(train.MiscFeature, train.SalePrice)
+# train.groupby(['MiscFeature'])[['MiscFeature']].count()
+# train['MiscFeature'].fillna('None', inplace=True)
+# print(train['MiscFeature'].head())  # no missing value, the value of MiscVal where MiscFeature is None is 0
+# wanna_drop_feats.remove('MiscFeature')
+# # missing value of Alley
+# plt.figure(figsize=(12, 8))
+# sns.boxplot(train.Alley, train.SalePrice)
+# train.groupby(['Alley'])[['Alley']].count()
+# train['MiscFeature'].fillna('missing', inplace=True)
+# wanna_drop_feats.remove('Alley')
+#
+# # Fence
+# plt.figure(figsize=(12, 8))
+# sns.boxplot(train.Fence, train.SalePrice)
+# train.groupby(['Fence'])[['Fence']].count()
+# train['Fence'].fillna('missing', inplace=True)
+# wanna_drop_feats.remove('Fence')
+#
+# # FireplaceQu
+# plt.figure(figsize=(12, 8))
+# sns.boxplot(train.FireplaceQu, train.SalePrice)
+# train.groupby(['FireplaceQu'])[['Fence']].count()
+# train['FireplaceQu'].fillna('None', inplace=True)
+# wanna_drop_feats.remove('FireplaceQu')
+#
+# # LotFrontage
+# plt.figure(figsize=(12, 8))
+# plt.scatter(train.LotFrontage, train.SalePrice)
+#
+#
+# for f in wanna_drop_feats:
+#     train.drop(f, inplace=True, axis=1)
+#     print('> deleted from train due to missing value: %s ' % f)
+# # ???: if keep and fill LotFrontage, MasVnrArea, will be any difference?
+
+
 
