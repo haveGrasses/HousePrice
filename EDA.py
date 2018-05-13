@@ -223,6 +223,7 @@ print(train.isnull().sum().sum())
 train['LotFrontage'] = train.groupby(['LotAreaCut'])['LotFrontage'].transform(lambda x: x.fillna(x.median()))
 print(train.isnull().sum().sum())  # 0
 del train['LotAreaCut']
+
 # cate_missing = [str(f) for f in missing_df.index if train.dtypes[f] == object and f not in fill_with_None]
 # nume_missing = [str(f) for f in missing_df.index if train.dtypes[f] != object]
 
@@ -283,4 +284,35 @@ del train['LotAreaCut']
 # # ???: if keep and fill LotFrontage, MasVnrArea, will be any difference?
 
 
+# feature engineer
+print(train.dtypes[train.dtypes != object].index)
+
+category_f = ['MSSubClass', 'OverallCond', 'YearBuilt', 'YearRemodAdd', 'MoSold', 'YrSold']
+for f in category_f:
+    train[f] = train[f].astype('category')
+
+# explore how to map values
+train.groupby(['MSSubClass'])[['SalePrice']].agg(['mean', 'median', 'count'])\
+    .sort_values(axis=0, ascending=False, by=('SalePrice', 'median'))
+"""
+               SalePrice              
+                     mean  median count
+MSSubClass                             
+60          240403.542088  216000   297
+120         200779.080460  192000    87
+80          169775.789474  165500    57
+75          192437.500000  163500    16
+20          185224.811567  159250   536
+70          166772.416667  156000    60
+160         138647.380952  146000    63
+40          156125.000000  142500     4
+85          147810.000000  140750    20
+90          133541.076923  135980    52
+50          143302.972222  132000   144
+190         129613.333333  128250    30
+45          108591.666667  107500    12
+30           95829.724638   99900    69
+180         102300.000000   88500    10
+
+"""
 
