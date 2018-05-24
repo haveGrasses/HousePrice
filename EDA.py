@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import gc
+from sklearn.preprocessing import LabelEncoder
 
 
 pd.set_option('display.width', 500, 'display.max_rows', 500)  # 'precision', 2
@@ -291,28 +292,84 @@ category_f = ['MSSubClass', 'OverallCond', 'YearBuilt', 'YearRemodAdd', 'MoSold'
 for f in category_f:
     train[f] = train[f].astype('category')
 
-# explore how to map values
-train.groupby(['MSSubClass'])[['SalePrice']].agg(['mean', 'median', 'count'])\
-    .sort_values(axis=0, ascending=False, by=('SalePrice', 'median'))
-"""
-               SalePrice              
-                     mean  median count
-MSSubClass                             
-60          240403.542088  216000   297
-120         200779.080460  192000    87
-80          169775.789474  165500    57
-75          192437.500000  163500    16
-20          185224.811567  159250   536
-70          166772.416667  156000    60
-160         138647.380952  146000    63
-40          156125.000000  142500     4
-85          147810.000000  140750    20
-90          133541.076923  135980    52
-50          143302.972222  132000   144
-190         129613.333333  128250    30
-45          108591.666667  107500    12
-30           95829.724638   99900    69
-180         102300.000000   88500    10
+# labelize
+print(train.dtypes[train.dtypes == object].index)
+# ['MSZoning', 'Street', 'Alley', 'LotShape', 'LandContour', 'Utilities', 'LotConfig', 'LandSlope', 'Neighborhood',
+# 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd',
+# 'MasVnrType', 'ExterQual', 'ExterCond', 'Foundation', 'BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1',
+# 'BsmtFinType2', 'Heating', 'HeatingQC', 'CentralAir', 'Electrical', 'KitchenQual', 'Functional', 'FireplaceQu',
+# 'GarageType', 'GarageFinish', 'GarageQual','GarageCond', 'PavedDrive', 'PoolQC', 'Fence', 'MiscFeature',
+# 'SaleType', 'SaleCondition']
+for f in train.dtypes[(train.dtypes == object) | (train.dtypes == 'category')].index:
+    # print(f, train[f].unique())
+    if len(train[f].unique()) > 5:  # may need re-encode
+        print(train.groupby(f)[['SalePrice']].agg(['mean', 'median', 'count'])
+              .sort_values(axis=0, ascending=False, by=('SalePrice', 'median')).plot(kind='bar'))
+# re-encode some feats based on the above results and plot
+# cols1: need re-encode
+cols1 = ['MSSubClass', 'Neighborhood', 'Exterior1st', 'Exterior2nd']
+# cols2: use LabelEncoder() directly
+cols2 = [
+    'HouseStyle', 'YearBuilt', 'YearRemodAdd', 'RoofStyle', 'RoofMatl', 'Foundation', 'BsmtFinType1',
+    'BsmtFinType2', 'Heating', 'Functional', 'FireplaceQu', 'GarageType', 'GarageQual', 'GarageCond',
+    'MoSold', 'SaleType', 'SaleCondition', 'Condition1', 'Condition2'
+]
+# cols3: do not need re-encode
+cols3 = ['OverallQual', 'OverallCond']
 
-"""
+# for cols2:
+encoder = LabelEncoder()
+for col in cols2:
+    train[col] = encoder.fit_transform(train[col])
+# after transform, dtypes were converted to int, is it appropriate???
 
+# for cols1:
+
+
+def map_values():
+    train['_MSSubClass'] = train.MSSubClass.map({
+        180: 1, 30: 1, 45: 1,
+        190: 2, 50: 2, 90: 2, 85: 2, 40: 2, 160: 2,
+        70: 3, 20: 3, 75: 3, 80: 3,
+        120: 4, 60: 4
+    })
+
+    train['_Neighborhood'] = train.Neighborhood.map({
+        'MeadowV': 1, 'IDOTRR': 1, 'BrDale': 1,
+        'OldTown': 2, 'Edwards': 2, 'BrkSide':2,
+        'Sawyer': 3, 'Blueste': 3, 'SWISU': 3, 'NAmes': 3, 'NPkVill': 3,
+        'Mitchel': 4,
+        'SawyerW': 5, 'Gilbert': 5, 'NWAmes': 5, 'Blmngtn': 5,
+        'CollgCr': 6,
+        'ClearCr': 7, 'Crawfor': 7,
+        'Veenker': 8, 'Timber': 8,
+        'Somerst': 9,
+        'StoneBr': 10, 'NridgHt': 10,
+        'NoRidge': 11
+    })
+
+    train['_Exterior1st'] = train.Exterior1st.map({
+        'BrkComm': 1,
+        'AsphShn': 2, 'CBlock': 2, 'AsbShng': 2,
+        'WdShing': 3, 'Wd Sdng': 3, 'MetalSd': 3,
+        'Stucco': 4, 'HdBoard': 4,
+        'BrkFace': 5,
+        'Plywood': 6,
+        'VinylSd': 7,
+        'CemntBd': 8,
+        'Stone': 9, 'ImStucc': 9
+    })
+
+    train['_Exterior2nd'] = train.Exterior2nd.map({
+        'CBlock': 1, 'AsbShng': 1,
+        'Wd Sdng': 2, 'Wd Shng': 2, 'MetalSd': 2, 'AsphShn': 2, 'Stucco': 2,
+        'Brk Cmn': 3,
+        'HdBoard': 4, 'BrkFace': 4, 'Plywood': 4, 'Stone': 4,
+        'ImStucc': 5,
+        'VinylSd': 6,
+        'CmentBd': 7,
+        'Other': 8,
+    })
+
+
+map_values()
