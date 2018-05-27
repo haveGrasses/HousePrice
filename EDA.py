@@ -1,16 +1,19 @@
-
 import os
-os.chdir('F:\python\machine learning\HousePrice')
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import gc
-from sklearn.preprocessing import LabelEncoder
 
+from sklearn.linear_model import Lasso
+from sklearn.preprocessing import LabelEncoder, RobustScaler
+from scipy.stats import skew
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 
+os.chdir('F:\python\machine learning\HousePrice')
 pd.set_option('display.width', 500, 'display.max_rows', 500)  # 'precision', 2
-
 train = pd.read_csv('./input/train.csv')
 
 
@@ -228,7 +231,6 @@ del train['LotAreaCut']
 # cate_missing = [str(f) for f in missing_df.index if train.dtypes[f] == object and f not in fill_with_None]
 # nume_missing = [str(f) for f in missing_df.index if train.dtypes[f] != object]
 
-
 # # see if these feats should be kept
 # for f in cate_missing:
 #     plt.figure(figsize=(12, 8))
@@ -278,7 +280,6 @@ del train['LotAreaCut']
 # plt.figure(figsize=(12, 8))
 # plt.scatter(train.LotFrontage, train.SalePrice)
 #
-#
 # for f in wanna_drop_feats:
 #     train.drop(f, inplace=True, axis=1)
 #     print('> deleted from train due to missing value: %s ' % f)
@@ -300,33 +301,51 @@ print(train.dtypes[train.dtypes == object].index)
 # 'BsmtFinType2', 'Heating', 'HeatingQC', 'CentralAir', 'Electrical', 'KitchenQual', 'Functional', 'FireplaceQu',
 # 'GarageType', 'GarageFinish', 'GarageQual','GarageCond', 'PavedDrive', 'PoolQC', 'Fence', 'MiscFeature',
 # 'SaleType', 'SaleCondition']
-for f in train.dtypes[(train.dtypes == object) | (train.dtypes == 'category')].index:
-    # print(f, train[f].unique())
-    if len(train[f].unique()) > 5:  # may need re-encode
-        print(train.groupby(f)[['SalePrice']].agg(['mean', 'median', 'count'])
-              .sort_values(axis=0, ascending=False, by=('SalePrice', 'median')).plot(kind='bar'))
-# re-encode some feats based on the above results and plot
+
+# for f in train.dtypes[(train.dtypes == object) | (train.dtypes == 'category')].index:
+#     # print(f, train[f].unique())
+#     if len(train[f].unique()) > 5:  # may need re-encode
+#         print(train.groupby(f)[['SalePrice']].agg(['mean', 'median', 'count'])
+#               .sort_values(axis=0, ascending=False, by=('SalePrice', 'median')).plot(kind='bar'))
+
+# re-encode some feats based on the above results and data——description
 # cols1: need re-encode
 cols1 = ['MSSubClass', 'Neighborhood', 'Exterior1st', 'Exterior2nd']
-# cols2: use LabelEncoder() directly
+
+# cols2: convert dtype, getdummy()
+
 cols2 = [
-    'HouseStyle', 'YearBuilt', 'YearRemodAdd', 'RoofStyle', 'RoofMatl', 'Foundation', 'BsmtFinType1',
-    'BsmtFinType2', 'Heating', 'Functional', 'FireplaceQu', 'GarageType', 'GarageQual', 'GarageCond',
-    'MoSold', 'SaleType', 'SaleCondition', 'Condition1', 'Condition2'
+    'HouseStyle', 'RoofStyle', 'RoofMatl', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating',
+    'Functional', 'GarageType', 'SaleType', 'SaleCondition', 'Condition1', 'Condition2', 'BsmtFinType2'
 ]
+
 # cols3: do not need re-encode
 cols3 = ['OverallQual', 'OverallCond']
 
-# for cols2:
-encoder = LabelEncoder()
-for col in cols2:
-    train[col] = encoder.fit_transform(train[col])
-# after transform, dtypes were converted to int, is it appropriate???
+# cols4:
+cols4 = [
+    'KitchenQual', 'BsmtQual', 'BsmtCond', 'BsmtFinType2', 'ExterQual', 'ExterCond', 'PoolQC', 'HeatingQC',
+    'BsmtExposure', 'GarageQual', 'GarageCond', 'FireplaceQu'
+]
+
+# for cols4:
+
+
+def encode_label(train):
+    encoder = LabelEncoder()
+    for col in cols4:
+        train[col] = encoder.fit_transform(train[col])
+        train[col] = train[col].astype('int')
+    for col in ['YearBuilt', 'YearRemodAdd', 'MoSold', 'YrSold']:
+        train[col] = train[col].astype('int')
+    for col in cols3:
+        train[col] = train[col].astype('int')
+
 
 # for cols1:
 
 
-def map_values():
+def map_values(train):
     train['_MSSubClass'] = train.MSSubClass.map({
         180: 1, 30: 1, 45: 1,
         190: 2, 50: 2, 90: 2, 85: 2, 40: 2, 160: 2,
@@ -372,4 +391,65 @@ def map_values():
     })
 
 
-map_values()
+class LabelEnc(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, x):
+        encode_label(x)
+        map_values(x)
+        return x
+
+
+# feature importance
+class SkewDummies(BaseEstimator, TransformerMixin):
+    def __init__(self, skew=0.5):
+        self.skew = skew
+
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, x):
+        x_numeric = x.select_dtypes(exclude=["object", "category"])
+        skewness = x_numeric.apply(lambda t: skew(t))
+        skewness_features = skewness[abs(skewness) >= self.skew].index
+        x[skewness_features] = np.log1p(x[skewness_features])
+        x = pd.get_dummies(x)
+        return x
+
+
+# retain train for other use
+train2 = train.copy()
+
+# extract y
+y = train2['SalePrice']
+train2.drop('SalePrice', axis=1, inplace=True)
+y_log = np.log(y)
+
+# transform data
+pipe = Pipeline([
+    ('LabelEnc', LabelEnc()),
+    ('SkewDummies', SkewDummies(skew=1)),
+    ])
+train_pipe = pipe.fit_transform(train2)
+# train_pipe = pd.DataFrame(pipe.fit_transform(train2))
+print('train_pipe: \n', train_pipe.head())
+
+# split data
+X_train, X_test, y_train, y_test = train_test_split(train_pipe, y_log, test_size=0.3, random_state=0)
+
+rs = RobustScaler()
+X_train = rs.fit_transform(X_train)
+X_test = rs.transform(X_test)
+
+lasso = Lasso(alpha=0.001)
+lasso.fit(X_train, y_train)
+FI_lasso = pd.DataFrame({"Feature Importance": lasso.coef_}, index=train_pipe.columns)
+print("Feature Importance: \n", FI_lasso.sort_values("Feature Importance", ascending=False))
+FI_lasso[FI_lasso["Feature Importance"] != 0].sort_values("Feature Importance").plot(kind="barh", figsize=(15, 25))
+plt.show()
+
+
