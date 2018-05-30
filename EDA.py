@@ -453,3 +453,72 @@ FI_lasso[FI_lasso["Feature Importance"] != 0].sort_values("Feature Importance").
 plt.show()
 
 
+# feature combination
+class FeatCombine(BaseEstimator, TransformerMixin):
+
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, x):
+        x["SUM_SF"] = x["TotalBsmtSF"] + x["1stFlrSF"] + x["2ndFlrSF"] + x["BsmtFinSF1"] + x["WoodDeckSF"] \
+                      + x["OpenPorchSF"] + x["ScreenPorch"] + x["3SsnPorch"] + x["EnclosedPorch"]
+        x["SUM_Area"] = x["GrLivArea"] + x["PoolArea"] + x["MasVnrArea"] + x["LotArea"] + x["GarageArea"]
+
+        x["SQ_SUM_SF"] = x["SUM_SF"] * x["SUM_SF"]
+        x["SQ_SUM_Area"] = x["SUM_Area"] * x["SUM_Area"]
+        
+        x["SUM_Qu&Cond"] = x["OverallQual"] + x["OverallCond"] + x["KitchenQual"] + x["BsmtQual"] + x["BsmtCond"] \
+                                            + x["BsmtFinType2"] + x["ExterQual"] + x["ExterCond"] + x["PoolQC"] \
+                                            + x["HeatingQC"] + x["BsmtExposure"] + x["GarageQual"] + x["GarageCond"] \
+                                            + x["FireplaceQu"]
+
+        x['MIX_SF_Qu01'] = x["TotalBsmtSF"] * x["OverallQual"]
+        x["MIX_Area_Qu01"] = x["GrLivArea"] * x["OverallQual"]
+
+        x['MIX_SF_Qu02'] = x["SUM_SF"] * x["OverallQual"]
+        x["MIX_Area_Qu02"] = x["SUM_Area"] * x["OverallQual"]
+
+        x["SUM_Room_Bath"] = x["FullBath"] + x["HalfBath"] + x["TotRmsAbvGrd"]
+
+        x["MIX_Year_QU"] = x["YearBuilt"] * x["OverallQual"] / 100
+
+        x["AVG_Year"] = x["YearBuilt"] + x["YearRemodAdd"] + x["GarageYrBlt"] / 3
+
+        x["MIX_Year_Area01"] = x["GrLivArea"] * x["YearBuilt"] / 100
+        x["MIX_Year_Area02"] = x["GrLivArea"] * x["AVG_Year"] / 100
+        x["MIX_Year_Area03"] = x["SUM_Area"] * x["YearBuilt"] / 100
+        x["MIX_Year_Area04"] = x["SUM_Area"] * x["AVG_Year"] / 100
+
+        x["MIX_Year_SF01"] = x["TotalBsmtSF"] * x["YearBuilt"] / 100
+        x["MIX_Year_SF02"] = x["TotalBsmtSF"] * x["AVG_Year"] / 100
+        x["MIX_Year_SF03"] = x["SUM_SF"] * x["YearBuilt"] / 100
+        x["MIX_Year_SF04"] = x["SUM_SF"] * x["AVG_Year"] / 100
+
+        x["MIX_Func_Area01"] = x["_Functional"] * x["GrLivArea"]
+        x["MIX_Func_SF01"] = x["_Functional"] * x["TotalBsmtSF"]
+        x["MIX_Func_Area02"] = x["_Functional"] * x["SUM_Area"]
+        x["MIX_Func_SF02"] = x["_Functional"] * x["SUM_SF"]
+        x["MIX_Func_Qu"] = x["_Functional"] + x["OverallQual"]
+
+        x["MIX_Condition1_Area"] = x["Condition1_Norm"] * x["SUM_SF"]
+        x["MIX_Condition1_Qu"] = x["Condition1_Norm"] + x["OverallQual"]
+
+        x["MIX_Neighbor_Area"] = x["_Neighborhood"] * x["SUM_SF"]
+        x["MIX_Neighbor_Qu"] = x["_Neighborhood"] + x["OverallQual"]
+        x["MIX_Neighbor_Year"] = x["_Neighborhood"] + x["YearBuilt"]
+
+        x["MIX_MSZoning_SF"] = (x["MSZoning"] + 1) * x["TotalHouse"]
+        x["MIX_MSZoning_Qu"] = (x["MSZoning"] + 1) + x["OverallQual"]
+        x["MIX_MSZoning_Year"] = (x["MSZoning"] + 1) + x["YearBuilt"]
+
+        x["AbnormalSymptoms"] = x["SaleCondition_Abnorml"] * x["SaleType"]
+
+        return x
+
+
+pipe = Pipeline([
+    ('LabelEnc', LabelEnc()),
+    ('FeatCombine', FeatCombine()),
+    ('SkewDummies', SkewDummies(skew=1))
+    ])
+
