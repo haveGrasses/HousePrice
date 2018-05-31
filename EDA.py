@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import gc
 
+from sklearn.decomposition import PCA, KernelPCA
 from sklearn.linear_model import Lasso
 from sklearn.preprocessing import LabelEncoder, RobustScaler
 from scipy.stats import skew
@@ -316,7 +317,7 @@ cols1 = ['MSSubClass', 'Neighborhood', 'Exterior1st', 'Exterior2nd']
 
 cols2 = [
     'HouseStyle', 'RoofStyle', 'RoofMatl', 'Foundation', 'BsmtFinType1', 'BsmtFinType2', 'Heating',
-    'Functional', 'GarageType', 'SaleType', 'SaleCondition', 'Condition1', 'Condition2', 'BsmtFinType2'
+    'GarageType', 'SaleType', 'SaleCondition', 'Condition1', 'Condition2', 'BsmtFinType2'
 ]
 
 # cols3: do not need re-encode
@@ -336,6 +337,9 @@ def encode_label(train):
     for col in cols4:
         train[col] = encoder.fit_transform(train[col])
         train[col] = train[col].astype('int')
+
+    train["_MSZoning"] = encoder.fit_transform(train["MSZoning"])
+
     for col in ['YearBuilt', 'YearRemodAdd', 'MoSold', 'YrSold']:
         train[col] = train[col].astype('int')
     for col in cols3:
@@ -388,6 +392,15 @@ def map_values(train):
         'VinylSd': 6,
         'CmentBd': 7,
         'Other': 8,
+    })
+
+    train['_Functional'] = train.Functional.map({
+        'Maj2': 1,
+        'Sev': 2,
+        'Mod': 3,
+        'Min1': 4, 'Min2': 4, 'Maj1': 4,
+        'Typ': 5,
+        'Sal': 6
     })
 
 
@@ -445,6 +458,8 @@ rs = RobustScaler()
 X_train = rs.fit_transform(X_train)
 X_test = rs.transform(X_test)
 
+# print(train_pipe.shape, X_train.shape, X_test.shape)
+
 lasso = Lasso(alpha=0.001)
 lasso.fit(X_train, y_train)
 FI_lasso = pd.DataFrame({"Feature Importance": lasso.coef_}, index=train_pipe.columns)
@@ -460,9 +475,9 @@ class FeatCombine(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, x):
-        x["SUM_SF"] = x["TotalBsmtSF"] + x["1stFlrSF"] + x["2ndFlrSF"] + x["BsmtFinSF1"] + x["WoodDeckSF"] \
-                      + x["OpenPorchSF"] + x["ScreenPorch"] + x["3SsnPorch"] + x["EnclosedPorch"]
-        x["SUM_Area"] = x["GrLivArea"] + x["PoolArea"] + x["MasVnrArea"] + x["LotArea"] + x["GarageArea"]
+        x["SUM_SF"] = x["TotalBsmtSF"] + x["BsmtFinSF1"] + x["WoodDeckSF"] + x["OpenPorchSF"] \
+                      + x["ScreenPorch"] + x["3SsnPorch"] + x["EnclosedPorch"]
+        x["SUM_Area"] = x["GrLivArea"] + x["PoolArea"] + x["MasVnrArea"] + x["LotArea"]
 
         x["SQ_SUM_SF"] = x["SUM_SF"] * x["SUM_SF"]
         x["SQ_SUM_Area"] = x["SUM_Area"] * x["SUM_Area"]
@@ -478,11 +493,11 @@ class FeatCombine(BaseEstimator, TransformerMixin):
         x['MIX_SF_Qu02'] = x["SUM_SF"] * x["OverallQual"]
         x["MIX_Area_Qu02"] = x["SUM_Area"] * x["OverallQual"]
 
-        x["SUM_Room_Bath"] = x["FullBath"] + x["HalfBath"] + x["TotRmsAbvGrd"]
+        # x["SUM_Room_Bath"] = x["FullBath"] + x["HalfBath"] + x["TotRmsAbvGrd"]
 
         x["MIX_Year_QU"] = x["YearBuilt"] * x["OverallQual"] / 100
 
-        x["AVG_Year"] = x["YearBuilt"] + x["YearRemodAdd"] + x["GarageYrBlt"] / 3
+        x["AVG_Year"] = x["YearBuilt"] + x["YearRemodAdd"] / 2
 
         x["MIX_Year_Area01"] = x["GrLivArea"] * x["YearBuilt"] / 100
         x["MIX_Year_Area02"] = x["GrLivArea"] * x["AVG_Year"] / 100
@@ -494,31 +509,46 @@ class FeatCombine(BaseEstimator, TransformerMixin):
         x["MIX_Year_SF03"] = x["SUM_SF"] * x["YearBuilt"] / 100
         x["MIX_Year_SF04"] = x["SUM_SF"] * x["AVG_Year"] / 100
 
-        x["MIX_Func_Area01"] = x["_Functional"] * x["GrLivArea"]
-        x["MIX_Func_SF01"] = x["_Functional"] * x["TotalBsmtSF"]
-        x["MIX_Func_Area02"] = x["_Functional"] * x["SUM_Area"]
-        x["MIX_Func_SF02"] = x["_Functional"] * x["SUM_SF"]
-        x["MIX_Func_Qu"] = x["_Functional"] + x["OverallQual"]
-
-        x["MIX_Condition1_Area"] = x["Condition1_Norm"] * x["SUM_SF"]
-        x["MIX_Condition1_Qu"] = x["Condition1_Norm"] + x["OverallQual"]
+        x["MIX_Func_Area01"] = (x["_Functional"] + 1) * x["GrLivArea"]
+        x["MIX_Func_SF01"] = (x["_Functional"] + 1) * x["TotalBsmtSF"]
+        x["MIX_Func_Area02"] = (x["_Functional"] + 1) * x["SUM_Area"]
+        x["MIX_Func_SF02"] = (x["_Functional"] + 1) * x["SUM_SF"]
+        x["MIX_Func_Qu"] = (x["_Functional"] + 1) + x["OverallQual"]
 
         x["MIX_Neighbor_Area"] = x["_Neighborhood"] * x["SUM_SF"]
         x["MIX_Neighbor_Qu"] = x["_Neighborhood"] + x["OverallQual"]
         x["MIX_Neighbor_Year"] = x["_Neighborhood"] + x["YearBuilt"]
 
-        x["MIX_MSZoning_SF"] = (x["MSZoning"] + 1) * x["TotalHouse"]
-        x["MIX_MSZoning_Qu"] = (x["MSZoning"] + 1) + x["OverallQual"]
-        x["MIX_MSZoning_Year"] = (x["MSZoning"] + 1) + x["YearBuilt"]
+        x["MIX_MSZoning_SF"] = (x["_MSZoning"] + 1) * x["SUM_SF"]
+        x["MIX_MSZoning_Qu"] = (x["_MSZoning"] + 1) + x["OverallQual"]
+        x["MIX_MSZoning_Year"] = (x["_MSZoning"] + 1) + x["YearBuilt"]
 
-        x["AbnormalSymptoms"] = x["SaleCondition_Abnorml"] * x["SaleType"]
+        # x["AbnormalSymptoms"] = x["SaleCondition_Abnorml"] * x["SaleType"]
 
         return x
 
 
+y = train['SalePrice']
+train.drop('SalePrice', axis=1, inplace=True)
+y_log = np.log(y)
 pipe = Pipeline([
     ('LabelEnc', LabelEnc()),
     ('FeatCombine', FeatCombine()),
     ('SkewDummies', SkewDummies(skew=1))
     ])
+
+train_pipe = pipe.fit_transform(train)
+print('train_pipe:\n', train_pipe.shape)
+
+X_train, X_test, y_train, y_test = train_test_split(train_pipe, y_log, test_size=0.3, random_state=0)
+
+rs = RobustScaler()
+X_train = rs.fit_transform(X_train)
+X_test = rs.transform(X_test)
+
+pca = PCA(n_components=261)  # 259 is the feats numbers before feats combination
+X_train = pca.fit_transform(X_train)
+X_test = pca.transform(X_test)
+print("X_train and X_test Size: \n", X_train.shape, X_test.shape)
+
 
