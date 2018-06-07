@@ -11,8 +11,8 @@ train_df = pd.read_csv('./input/train.csv', index_col=0)
 print(train_df.head())
 
 # logarithm of y
-train_df["SalePrice"] = np.log1p(train_df["SalePrice"])
-
+train_df["SalePrice"] = np.log(train_df["SalePrice"])
+y = train_df.pop('SalePrice')
 # logarithm of features
 numeric_cols = train_df.columns[train_df.dtypes != 'object']
 train_df[numeric_cols] = np.log1p(train_df[numeric_cols])
@@ -26,7 +26,7 @@ train_df.fillna(train_df.mean(), inplace=True)
 print(train_df.isnull().sum().sum())
 # split
 
-y = train_df.pop('SalePrice')
+
 X_train, X_test, y_train, y_test = train_test_split(train_df, y, test_size=0.3, random_state=0)
 
 
