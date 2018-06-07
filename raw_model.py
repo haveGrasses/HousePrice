@@ -13,6 +13,7 @@ print(train_df.head())
 # logarithm of y
 train_df["SalePrice"] = np.log(train_df["SalePrice"])
 y = train_df.pop('SalePrice')
+
 # logarithm of features
 numeric_cols = train_df.columns[train_df.dtypes != 'object']
 train_df[numeric_cols] = np.log1p(train_df[numeric_cols])
